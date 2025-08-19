@@ -13,19 +13,20 @@ def get_websocket_manager():
 
 class CodeExecutionService:
     def __init__(self):
+        self.docker_available = False
+        self.client = None
+        
         try:
             self.client = docker.from_env()
-            # Проверяем подключение к Docker
             self.client.ping()
             self.docker_available = True
             print("Docker connection established successfully")
         except docker.errors.DockerException as e:
             print(f"Docker is not available: {e}")
-            self.client = None
-            self.docker_available = False
+            print("Falling back to simulation mode")
         
         self.active_containers: Dict[str, docker.models.containers.Container] = {}
-        self.gpio_state: Dict[int, Dict] = {}  # {pin: {mode: "IN/OUT", value: 0/1}}
+        self.gpio_state: Dict[int, Dict] = {}
         
     async def execute_code(self, client_id: str, code: str):
         """
@@ -33,14 +34,10 @@ class CodeExecutionService:
         """
         websocket_manager = get_websocket_manager()
         
-        # Проверяем доступность Docker
-        if not self.docker_available:
-            await websocket_manager.send_message(client_id, {
-                "type": "error",
-                "message": "Docker is not available. Please ensure Docker is installed and running.",
-                "timestamp": datetime.now().isoformat()
-            })
-            return
+        if self.docker_available:
+            await self._execute_with_docker(client_id, code)
+        else:
+            await self._execute_with_simulation(client_id, code)
         
         # Очистка входных данных
         sanitized_code = self._sanitize_input(code, 10000)
@@ -189,7 +186,144 @@ class CodeExecutionService:
                     return {"pin": pin, "value": value, "mode": self.gpio_state.get(pin, {}).get("mode", "OUT")}
         
         return None
+    async def _execute_with_docker(self, client_id: str, code: str):
+        """Выполнение кода с использованием Docker"""
+        websocket_manager = get_websocket_manager()
+        
+        # Очистка входных данных
+        sanitized_code = self._sanitize_input(code, 10000)
+        if not sanitized_code:
+            await websocket_manager.send_message(client_id, {
+                "type": "error",
+                "message": "Invalid code input"
+            })
+            return
 
+        # Отправка сообщения о начале выполнения
+        await websocket_manager.send_message(client_id, {
+            "type": "status",
+            "message": "Execution started",
+            "timestamp": datetime.now().isoformat()
+        })
+
+        try:
+            # Создание и запуск контейнера
+            container = self.client.containers.run(
+                "raspberry-python-runner",
+                detach=True,
+                stdin_open=True,
+                mem_limit=settings.DOCKER_MEMORY_LIMIT,
+                network_mode="none",
+                cpu_period=100000,
+                cpu_quota=50000,
+                pids_limit=100,
+                remove=True,
+            )
+
+            self.active_containers[client_id] = container
+
+            # Отправка кода в контейнер
+            socket = container.attach_socket(params={'stdin': 1, 'stream': 1})
+            try:
+                socket._sock.sendall((sanitized_code + "\n").encode('utf-8'))
+                socket._sock.sendall(b"__END_OF_CODE__\n")
+            finally:
+                socket.close()
+
+            # Мониторинг вывода контейнера в реальном времени
+            await self._monitor_container_output(container, client_id)
+
+            # Ожидание завершения контейнера
+            result = container.wait()
+            
+            await websocket_manager.send_message(client_id, {
+                "type": "status",
+                "message": f"Execution completed with exit code: {result['StatusCode']}",
+                "timestamp": datetime.now().isoformat()
+            })
+
+        except docker.errors.ImageNotFound:
+            await websocket_manager.send_message(client_id, {
+                "type": "error",
+                "message": "Docker image not found. Please build the code runner image first.",
+                "timestamp": datetime.now().isoformat()
+            })
+        except docker.errors.DockerException as e:
+            await websocket_manager.send_message(client_id, {
+                "type": "error",
+                "message": f"Docker error: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            await websocket_manager.send_message(client_id, {
+                "type": "error",
+                "message": f"Unexpected error: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            })
+        finally:
+            if client_id in self.active_containers:
+                del self.active_containers[client_id]
+    
+    async def _execute_with_simulation(self, client_id: str, code: str):
+        """Режим эмуляции выполнения кода без Docker"""
+        websocket_manager = get_websocket_manager()
+        
+        await websocket_manager.send_message(client_id, {
+            "type": "status",
+            "message": "Execution started (simulation mode)",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        try:
+            # Имитация выполнения кода
+            logs = [
+                "Hello from simulation mode!",
+                "Setting up GPIO...",
+                "GPIO setup completed",
+                "Blinking LED...",
+                "Cleanup completed"
+            ]
+            
+            for log in logs:
+                await websocket_manager.send_message(client_id, {
+                    "type": "log",
+                    "message": log,
+                    "timestamp": datetime.now().isoformat()
+                })
+                await asyncio.sleep(0.5)
+            
+            # Имитация GPIO событий
+            gpio_events = [
+                {"pin": 18, "value": 1, "mode": "OUT"},
+                {"pin": 18, "value": 0, "mode": "OUT"},
+                {"pin": 18, "value": 1, "mode": "OUT"},
+                {"pin": 18, "value": 0, "mode": "OUT"},
+                {"pin": 18, "value": 1, "mode": "OUT"},
+                {"pin": 18, "value": 0, "mode": "OUT"},
+            ]
+            
+            for event in gpio_events:
+                await websocket_manager.send_message(client_id, {
+                    "type": "gpio_update",
+                    "pin": event["pin"],
+                    "value": event["value"],
+                    "mode": event["mode"],
+                    "timestamp": datetime.now().isoformat()
+                })
+                await asyncio.sleep(0.5)
+            
+            await websocket_manager.send_message(client_id, {
+                "type": "status",
+                "message": "Execution completed (simulation mode)",
+                "timestamp": datetime.now().isoformat()
+            })
+            
+        except Exception as e:
+            await websocket_manager.send_message(client_id, {
+                "type": "error",
+                "message": f"Simulation error: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            })
     def _update_gpio_state(self, pin: int, updates: Dict):
         """
         Обновление состояния GPIO

@@ -84,9 +84,11 @@ class WebSocketManager:
 
     async def _handle_ping(self, client_id: str, message: dict):
         """Обработка ping сообщения"""
+        timestamp = message.get("timestamp", "unknown")
         await self.send_message(client_id, {
             "type": "pong",
-            "timestamp": message.get("timestamp")
+            "timestamp": timestamp,
+            "original_timestamp": timestamp
         })
 
     async def _handle_code_execution(self, client_id: str, message: dict):

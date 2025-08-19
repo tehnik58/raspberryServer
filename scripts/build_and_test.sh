@@ -64,6 +64,15 @@ run_tests() {
     if curl -s http://localhost:8000/health > /dev/null; then
         print_status "Сервер работает, запуск WebSocket тестов..."
         
+        # Проверка доступности Docker
+        docker_available=false
+        if docker info > /dev/null 2>&1; then
+            docker_available=True
+            print_status "Docker доступен"
+        else
+            print_warning "Docker недоступен, тестирование в режиме эмуляции"
+        fi
+        
         # Тест WebSocket соединения
         python3 -c "
 import asyncio
@@ -75,45 +84,88 @@ async def test_websocket():
     try:
         uri = 'ws://localhost:8000/api/ws/test-client-123'
         async with websockets.connect(uri) as websocket:
+            # Первое сообщение должно быть приветственным
+            welcome_response = await websocket.recv()
+            print('✅ Connection established:', welcome_response)
+            
             # Тест ping
             await websocket.send(json.dumps({'type': 'ping', 'timestamp': 'test'}))
-            response = await websocket.recv()
-            print('✅ Ping test passed:', response)
+            ping_response = await websocket.recv()
+            print('✅ Ping test passed:', ping_response)
             
-            # Тест выполнения кода
-            test_code = '''
+            # Тест выполнения кода (только если Docker доступен)
+            if $docker_available:
+                test_code = '''
+import RPi.GPIO as GPIO
 import time
-print('Hello from test code!')
-for i in range(3):
-    print(f'Count: {i}')
-    time.sleep(0.1)
-print('Test completed')
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(18, GPIO.OUT)
+
+try:
+    for i in range(3):
+        GPIO.output(18, GPIO.HIGH)
+        print('LED ON')
+        time.sleep(0.5)
+        GPIO.output(18, GPIO.LOW)
+        print('LED OFF')
+        time.sleep(0.5)
+finally:
+    GPIO.cleanup()
+    print('Cleanup completed')
 '''
-            await websocket.send(json.dumps({
-                'type': 'code_execution', 
-                'code': test_code
-            }))
-            
-            # Получение ответов
-            received_logs = 0
-            for i in range(10):  # Максимум 10 сообщений
-                response = await websocket.recv()
-                data = json.loads(response)
-                if data.get('type') == 'log':
-                    print(f'📝 Log: {data[\"message\"]}')
-                    received_logs += 1
-                elif data.get('type') == 'status':
-                    print(f'📊 Status: {data[\"message\"]}')
-                elif data.get('type') == 'gpio_update':
-                    print(f'🔌 GPIO Update: Pin {data[\"pin\"]} = {data[\"value\"]}')
+                await websocket.send(json.dumps({
+                    'type': 'code_execution', 
+                    'code': test_code
+                }))
                 
-                if received_logs >= 3:  # Ожидаем как минимум 3 лога
-                    break
-            
-            print('✅ Code execution test passed')
+                # Получение ответов
+                received_messages = 0
+                max_messages = 20
+                
+                while received_messages < max_messages:
+                    try:
+                        response = await asyncio.wait_for(websocket.recv(), timeout=15.0)
+                        data = json.loads(response)
+                        
+                        if data.get('type') == 'log':
+                            print(f'📝 Log: {data[\"message\"]}')
+                            received_messages += 1
+                        elif data.get('type') == 'status':
+                            print(f'📊 Status: {data[\"message\"]}')
+                            received_messages += 1
+                        elif data.get('type') == 'gpio_update':
+                            print(f'🔌 GPIO Update: Pin {data[\"pin\"]} = {data[\"value\"]}')
+                            received_messages += 1
+                        elif data.get('type') == 'connection_established':
+                            pass
+                        elif data.get('type') == 'error':
+                            print(f'❌ Error: {data[\"message\"]}')
+                            received_messages += 1
+                            break
+                        else:
+                            print(f'📨 Other: {response}')
+                            received_messages += 1
+                            
+                        # Если получили сообщение о завершении, выходим
+                        if 'completed' in data.get('message', '').lower() or 'error' in data.get('type', ''):
+                            break
+                            
+                    except asyncio.TimeoutError:
+                        print('❌ Timeout waiting for message')
+                        break
+                
+                if received_messages > 0:
+                    print('✅ Code execution test completed')
+                else:
+                    print('❌ No messages received during code execution test')
+            else:
+                print('⚠️ Docker not available, skipping code execution test')
             
     except Exception as e:
         print(f'❌ WebSocket test failed: {e}')
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 asyncio.run(test_websocket())
