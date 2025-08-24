@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Эмулятор Raspberry Pi</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧠 Эмулятор Raspberry Pi</h1>
+        </header>
+
+        <div class="main-content">
+            <div class="code-editor">
+                <h2>Редактор кода Python</h2>
+                <textarea id="python-code" placeholder="Введите ваш код Raspberry Pi здесь...">
+import RPi.GPIO as GPIO
+import time
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(18, GPIO.OUT)
+
+try:
+    for i in range(10):
+        GPIO.output(18, GPIO.HIGH)
+        time.sleep(0.5)
+        GPIO.output(18, GPIO.LOW)
+        time.sleep(0.5)
+finally:
+    GPIO.cleanup()
+                </textarea>
+                <div class="buttons">
+                    <button id="run-btn">▶️ Выполнить</button>
+                    <button id="stop-btn">⏹️ Остановить</button>
+                    <button id="clear-btn">🧹 Очистить</button>
+                </div>
+            </div>
+
+            <div class="output">
+                <h2>Результат выполнения</h2>
+                <div id="output-console"></div>
+            </div>
+        </div>
+
+        <div class="visualization">
+            <h2>Визуализация компонентов</h2>
+            <div id="gpio-components">
+                <!-- GPIO компоненты будут добавлены через JavaScript -->
+            </div>
+            <div id="sensor-data">
+                <!-- Данные с датчиков будут отображены здесь -->
+            </div>
+        </div>
+
+        <div class="connection-status">
+            <span id="status">❌ Не подключено</span>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

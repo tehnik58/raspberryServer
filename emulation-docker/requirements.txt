@@ -1,0 +1,3 @@
+FakeRPi.GPIO==0.7.1
+fake-smbus==1.0.2
+fake-serial==0.1.0

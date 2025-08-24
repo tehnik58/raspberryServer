@@ -1,33 +1,20 @@
 version: '3.8'
-services:
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - vc-network
 
-  server:
-    build:
-      context: .
-      dockerfile: Dockerfile.emulator
+services:
+  backend:
+    build: ./backend
     ports:
       - "8000:8000"
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      - redis
-    networks:
-      - vc-network
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./frontend:/app/frontend
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    privileged: true
+    user: root
+    depends_on:
+      - emulation-docker
 
-networks:
-  vc-network:
-    driver: bridge
-
-volumes:
-  redis_data:
+  emulation-docker:
+    build: ./emulation-docker
+    image: rpi-emulator
