@@ -3,28 +3,64 @@ class GPIOVisualizer {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
         this.pins = {};
+        this.pinModes = {}; // Хранение режимов пинов
         this.initGPIOComponents();
     }
 
     initGPIOComponents() {
-        // Очищаем контейнер
         this.container.innerHTML = '';
-        
-        // Создаем визуальные элементы для GPIO пинов (только основные пины)
         const importantPins = [2, 3, 4, 14, 15, 17, 18, 27, 22, 23, 24, 10, 9, 25, 11, 8, 7];
-        
+
         for (let pin of importantPins) {
             const pinElement = document.createElement('div');
             pinElement.className = 'gpio-pin gpio-inactive';
             pinElement.id = `gpio-${pin}`;
             pinElement.innerHTML = `<span>${pin}</span>`;
             
+            // Добавляем обработчик клика
+            pinElement.addEventListener('click', () => {
+                this.togglePinState(pin);
+            });
+            
             this.container.appendChild(pinElement);
             this.pins[pin] = pinElement;
+            this.pinModes[pin] = 'out'; // По умолчанию выход
         }
     }
 
-    updatePinState(pin, state) {
+    setPinMode(pin, mode) {
+        this.pinModes[pin] = mode;
+        const pinElement = this.pins[pin];
+        if (pinElement) {
+            if (mode === 'in') {
+                pinElement.classList.add('gpio-input');
+                pinElement.classList.remove('gpio-output');
+            } else {
+                pinElement.classList.add('gpio-output');
+                pinElement.classList.remove('gpio-input');
+            }
+        }
+    }
+
+    togglePinState(pin) {
+        if (this.pinModes[pin] === 'in') {
+            const currentState = this.pins[pin].classList.contains('gpio-active');
+            const newState = !currentState;
+            
+            this.updatePinState(pin, newState, 'input');
+            
+            // Отправляем изменение состояния на сервер
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'gpio_input',
+                    pin: pin,
+                    state: newState
+                }));
+            }
+        }
+    }
+
+    updatePinState(pin, state, mode = 'output') {
         const pinElement = this.pins[pin];
         if (pinElement) {
             if (state) {
@@ -33,6 +69,11 @@ class GPIOVisualizer {
             } else {
                 pinElement.classList.remove('gpio-active');
                 pinElement.classList.add('gpio-inactive');
+            }
+            
+            // Обновляем режим если передан
+            if (mode) {
+                this.setPinMode(pin, mode);
             }
         }
     }

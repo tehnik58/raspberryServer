@@ -94,6 +94,20 @@ button:hover {
     white-space: pre-wrap;
 }
 
+.gpio-input {
+    border: 2px dashed #2196F3;
+    cursor: pointer;
+}
+
+.gpio-input:hover {
+    background-color: #e3f2fd;
+}
+
+.gpio-output {
+    border: 2px solid #4CAF50;
+    cursor: default;
+}
+
 .visualization {
     background: white;
     padding: 20px;

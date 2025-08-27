@@ -32,46 +32,37 @@ gpio_emulator = GPIOEmulator()
 
 @app.websocket("/ws/execute")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
+    await ws_manager.connect(websocket)
     try:
         while True:
             data = await websocket.receive_json()
             
             if data.get("type") == "execute":
                 code = data.get("code", "")
-                
-                # Отправляем подтверждение начала выполнения
-                await websocket.send_json({
-                    "type": "execution_started",
-                    "message": "Выполнение началось"
-                })
-                
-                # Функция для отправки вывода
-                async def send_output(output):
-                    await websocket.send_json({
-                        "type": "output",
-                        "content": output
-                    })
-                
-                # Выполняем код с потоковой передачей
-                await docker_manager.execute_code_realtime(code, send_output)
-                
-                # Отправляем подтверждение завершения
-                await websocket.send_json({
-                    "type": "execution_completed",
-                    "message": "Выполнение завершено"
-                })
+                asyncio.create_task(docker_manager.execute_code_realtime(code, websocket))
                 
             elif data.get("type") == "stop":
-                await websocket.send_json({
-                    "type": "output",
-                    "content": "Выполнение остановлено по запросу пользователя"
-                })
+                await ws_manager.send_personal_message({
+                    "type": "execution_stopped",
+                    "message": "Выполнение остановлено"
+                }, websocket)
                 
+            elif data.get("type") == "gpio_input":  # Новый обработчик
+                pin = data.get("pin")
+                state = data.get("state")
+                if pin is not None and state is not None:
+                    gpio_emulator.update_input_pin_state(pin, state)
+                    await ws_manager.broadcast({
+                        "type": "gpio_state_update",
+                        "pin": pin,
+                        "state": state,
+                        "mode": "input"
+                    })
+                    
     except WebSocketDisconnect:
-        print("Клиент отключился")
+        ws_manager.disconnect(websocket)
     except Exception as e:
-        await websocket.send_json({
+        await ws_manager.send_personal_message({
             "type": "error",
-            "content": f"Ошибка соединения: {str(e)}"
-        })
+            "content": f"Ошибка: {str(e)}"
+        }, websocket)

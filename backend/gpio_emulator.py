@@ -1,17 +1,48 @@
 from typing import Dict
+import json
+import os
 
 class GPIOEmulator:
     def __init__(self):
-        self.pin_states: Dict[int, bool] = {}
-    
-    def update_pin_state(self, pin: int, state: bool):
-        """Обновляет состояние GPIO пина"""
-        self.pin_states[pin] = state
-    
-    def get_pin_state(self, pin: int) -> bool:
-        """Возвращает состояние GPIO пина"""
-        return self.pin_states.get(pin, False)
-    
+        self.output_pin_states: Dict[int, bool] = {}
+        self.input_pin_states: Dict[int, bool] = {}
+        self.states_file = "/app/gpio_states/states.json"
+        self._ensure_states_file_exists()
+        
+    def _ensure_states_file_exists(self):
+        os.makedirs(os.path.dirname(self.states_file), exist_ok=True)
+        if not os.path.exists(self.states_file):
+            with open(self.states_file, 'w') as f:
+                json.dump({}, f)
+
+    def _read_states(self):
+        try:
+            with open(self.states_file, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+
+    def _write_states(self):
+        with open(self.states_file, 'w') as f:
+            json.dump(self.input_pin_states, f)
+
+    def update_output_pin_state(self, pin: int, state: bool):
+        """Обновляет состояние выходного GPIO пина"""
+        self.output_pin_states[pin] = state
+
+    def get_output_pin_state(self, pin: int) -> bool:
+        """Возвращает состояние выходного GPIO пина"""
+        return self.output_pin_states.get(pin, False)
+
+    def update_input_pin_state(self, pin: int, state: bool):
+        """Обновляет состояние входного GPIO пина и сохраняет в файл"""
+        self.input_pin_states[str(pin)] = state
+        self._write_states()
+
+    def get_input_pin_state(self, pin: int) -> bool:
+        """Возвращает состояние входного GPIO пина"""
+        return self.input_pin_states.get(str(pin), False)
+
     def reset_all_pins(self):
         """Сбрасывает все пины в неактивное состояние"""
-        self.pin_states.clear()
+        self.output_pin_states.clear()

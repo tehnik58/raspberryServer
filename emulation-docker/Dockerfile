@@ -8,8 +8,11 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем пакеты для эмуляции Raspberry Pi
+# Устанавливаем пакеты для эмуляции
 RUN pip install requests
+
+# Создаем директорию для состояний GPIO
+RUN mkdir -p /app/gpio_states && chmod 777 /app/gpio_states
 
 # Копируем кастомные файлы эмуляции
 COPY custom_gpio.py .
@@ -23,8 +26,7 @@ RUN mkdir -p /app/RPi && \
 
 # Добавляем путь к модулям в PYTHONPATH
 ENV PYTHONPATH="/app:${PYTHONPATH}"
-ENV PYTHONUNBUFFERED=1  
-# Важно: отключаем буферизацию вывода
+ENV PYTHONUNBUFFERED=1
 
 # Создаем пользователя для безопасности
 RUN useradd -m -u 1000 emulator

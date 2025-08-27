@@ -132,33 +132,28 @@ json
 {
   "type": "stop"
 }
-📥 От сервера к клиенту:
-Вывод выполнения:
-
+📤 От клиента к серверу:
+json
+{
+  "type": "gpio_input",
+  "pin": 17,
+  "state": true
+}
+📥 От сервера клиентам:
+json
+{
+  "type": "gpio_state_update", 
+  "pin": 18,
+  "state": true,
+  "mode": "output"
+}
+📊 Вывод выполнения кода:
 json
 {
   "type": "output",
-  "content": "GPIO 18 setup as OUTPUT"
+  "content": "GPIO 18 output: True"
 }
-Статус выполнения:
 
-json
-{
-  "type": "execution_started",
-  "message": "Выполнение началось"
-}
-json
-{
-  "type": "execution_completed",
-  "message": "Выполнение завершено"
-}
-Ошибка:
-
-json
-{
-  "type": "error",
-  "content": "Ошибка выполнения: Timeout"
-}
 🐳 Docker Manager
 Конфигурация контейнеров
 python

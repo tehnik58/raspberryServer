@@ -43,7 +43,7 @@ if __name__ == "__main__":
         
         while True:
             try:
-                user_input = input(">>> ")
+                user_input = input()
                 if user_input.strip() == 'exit()':
                     break
                 exec(user_input)

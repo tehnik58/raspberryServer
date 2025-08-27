@@ -23,6 +23,24 @@ class CustomGPIO:
         self._mode = None
         self._pins = {}
         self._callbacks = {}
+        self.states_file = "/app/gpio_states/states.json"
+
+    def input(self, pin):
+        if pin not in self._pins or self._pins[pin]['mode'] != IN:
+            raise RuntimeError(f"Pin {pin} is not set up as input")
+        
+        # Чтение состояния из файла
+        try:
+            with open(self.states_file, 'r') as f:
+                states = json.load(f)
+            value = states.get(str(pin), False)
+        except:
+            value = False
+            
+        print(f"GPIO {pin} input: {value}")
+        sys.stdout.flush()
+        time.sleep(0.1)
+        return value
     
     def setmode(self, mode):
         """Устанавливает режим нумерации пинов"""

@@ -44,33 +44,34 @@ function handleWebSocketMessage(message) {
     }
 }
 
-// Функция для обнаружения GPIO событий в выводе
+// Функция для обнаружения GPIO событий
 function detectGPIOEvents(output) {
     if (!window.gpioVisualizer) return;
-    
-    // Ищем GPIO события в выводе
+
     const gpioOutputMatch = output.match(/GPIO (\d+) output: (True|False)/i);
     const gpioSetupMatch = output.match(/GPIO (\d+) setup as (OUT|IN)/i);
-    
+
     if (gpioOutputMatch) {
         const pin = parseInt(gpioOutputMatch[1]);
         const state = gpioOutputMatch[2].toLowerCase() === 'true';
-        window.gpioVisualizer.updatePinState(pin, state);
+        window.gpioVisualizer.updatePinState(pin, state, 'output');
+        
+        // Отправляем обновление состояния на сервер
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({
+                type: 'gpio_state_update',
+                pin: pin,
+                state: state,
+                mode: 'output'
+            }));
+        }
     }
     
     if (gpioSetupMatch) {
         const pin = parseInt(gpioSetupMatch[1]);
         const mode = gpioSetupMatch[2];
+        window.gpioVisualizer.setPinMode(pin, mode.toLowerCase());
         addMessage(`📌 GPIO ${pin} настроен как ${mode === 'OUT' ? 'выход' : 'вход'}`);
-    }
-    
-    // Ищем события датчиков
-    const sensorMatch = output.match(/(temperature|humidity|distance): ([0-9.]+)/i);
-    if (sensorMatch && window.sensorVisualizer) {
-        const sensor = sensorMatch[1].toLowerCase();
-        const value = sensorMatch[2];
-        const unit = sensor === 'temperature' ? '°C' : sensor === 'humidity' ? '%' : 'cm';
-        window.sensorVisualizer.updateSensorValue(sensor, value, unit);
     }
 }
     // Функция для добавления сообщений в консоль
