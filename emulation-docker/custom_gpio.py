@@ -17,6 +17,37 @@ PUD_DOWN = 21
 RISING = 31
 FALLING = 32
 BOTH = 33
+PWM = 2
+
+class PWM:
+    def __init__(self, pin, frequency=100):
+        self.pin = pin
+        self.frequency = frequency
+        self.duty_cycle = 0
+        self.running = False
+        print(f"PWM initialized on pin {pin} with frequency {frequency}Hz")
+        sys.stdout.flush()
+    
+    def start(self, duty_cycle):
+        self.duty_cycle = duty_cycle
+        self.running = True
+        print(f"PWM started on pin {self.pin} with duty cycle {duty_cycle}%")
+        sys.stdout.flush()
+    
+    def ChangeDutyCycle(self, duty_cycle):
+        self.duty_cycle = duty_cycle
+        print(f"PWM duty cycle changed to {duty_cycle}% on pin {self.pin}")
+        sys.stdout.flush()
+    
+    def ChangeFrequency(self, frequency):
+        self.frequency = frequency
+        print(f"PWM frequency changed to {frequency}Hz on pin {self.pin}")
+        sys.stdout.flush()
+    
+    def stop(self):
+        self.running = False
+        print(f"PWM stopped on pin {self.pin}")
+        sys.stdout.flush()
 
 class CustomGPIO:
     def __init__(self):
@@ -24,7 +55,11 @@ class CustomGPIO:
         self._pins = {}
         self._callbacks = {}
         self.states_file = "/app/gpio_states/states.json"
-
+    
+    def PWM(self, pin, frequency=100):
+        """Создает PWM объект для указанного пина"""
+        return self.PWM(pin, frequency)
+    
     def input(self, pin):
         if pin not in self._pins or self._pins[pin]['mode'] != IN:
             raise RuntimeError(f"Pin {pin} is not set up as input")

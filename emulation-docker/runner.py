@@ -27,6 +27,11 @@ humidity = components.read_humidity
 distance = components.read_distance
 set_led = components.set_led
 read_button = components.read_button
+create_motor = components.create_motor
+create_stepper = components.create_stepper
+get_motor_status = components.get_motor_status
+get_stepper_position = components.get_stepper_position
+PWM = GPIO.PWM
 
 # Выполняем пользовательский код
 if __name__ == "__main__":
@@ -43,7 +48,7 @@ if __name__ == "__main__":
         
         while True:
             try:
-                user_input = input()
+                user_input = input('>>')
                 if user_input.strip() == 'exit()':
                     break
                 exec(user_input)

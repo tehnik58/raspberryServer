@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     let websocket = null;
     const serverUrl = 'ws://' + window.location.hostname + ':8000/ws/execute';
+
     // Обработчик сообщений от сервера
 function handleWebSocketMessage(message) {
     switch (message.type) {
@@ -38,9 +39,29 @@ function handleWebSocketMessage(message) {
             addMessage('✅ Выполнение завершено');
             runButton.disabled = false;
             break;
+        case 'pwm_state_update':
+            if (window.gpioVisualizer) {
+                window.gpioVisualizer.updatePWMState(
+                    message.pin, 
+                    message.duty_cycle, 
+                    message.frequency
+                );
+            }
+            break;
             
         default:
             console.log('Неизвестный тип сообщения:', message);
+    }
+}
+
+function setPWM(pin, duty_cycle, frequency = 100) {
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify({
+            type: 'pwm_update',
+            pin: pin,
+            duty_cycle: duty_cycle,
+            frequency: frequency
+        }));
     }
 }
 

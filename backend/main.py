@@ -58,6 +58,19 @@ async def websocket_endpoint(websocket: WebSocket):
                         "state": state,
                         "mode": "input"
                     })
+            elif data.get("type") == "pwm_update":
+                pin = data.get("pin")
+                duty_cycle = data.get("duty_cycle")
+                frequency = data.get("frequency", 100)
+                
+                if pin is not None and duty_cycle is not None:
+                    gpio_emulator.update_pwm_state(pin, duty_cycle, frequency)
+                    await ws_manager.broadcast({
+                        "type": "pwm_state_update",
+                        "pin": pin,
+                        "duty_cycle": duty_cycle,
+                        "frequency": frequency
+                    })
                     
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)

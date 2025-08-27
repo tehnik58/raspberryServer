@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y \
 # Копируем requirements.txt и устанавливаем зависимости
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-
+RUN pip install numpy
 # Копируем все файлы бэкенда в рабочую директорию
 COPY *.py ./
 

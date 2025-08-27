@@ -7,6 +7,22 @@ class GPIOVisualizer {
         this.initGPIOComponents();
     }
 
+    updatePWMState(pin, duty_cycle, frequency) {
+        const pinElement = this.pins[pin];
+        if (pinElement) {
+            // Обновляем отображение PWM
+            pinElement.style.opacity = 0.5 + (duty_cycle / 200); // Визуальная индикация
+            pinElement.title = `PWM: ${duty_cycle}% @ ${frequency}Hz`;
+
+            // Добавляем анимацию мерцания для PWM
+            if (duty_cycle > 0 && duty_cycle < 100) {
+                pinElement.style.animation = `pwm-flicker ${1/frequency}s infinite`;
+            } else {
+                pinElement.style.animation = 'none';
+            }
+        }
+    }
+
     initGPIOComponents() {
         this.container.innerHTML = '';
         const importantPins = [2, 3, 4, 14, 15, 17, 18, 27, 22, 23, 24, 10, 9, 25, 11, 8, 7];
@@ -104,6 +120,98 @@ class SensorVisualizer {
         this.sensors[sensorName].textContent = `${sensorName}: ${value} ${unit}`;
     }
 }
+class MotorVisualizer {
+    constructor(containerId) {
+        this.container = document.getElementById(containerId);
+        this.motors = {};
+    }
+    
+    addMotor(name, maxSpeed = 100) {
+        const motorElement = document.createElement('div');
+        motorElement.className = 'motor';
+        motorElement.innerHTML = `
+            <div class="motor-name">${name}</div>
+            <div class="motor-speed">0%</div>
+            <div class="motor-direction">▶️</div>
+            <div class="motor-bar">
+                <div class="motor-progress"></div>
+            </div>
+        `;
+        
+        this.container.appendChild(motorElement);
+        this.motors[name] = motorElement;
+    }
+    
+    updateMotor(name, speed, direction) {
+        const motor = this.motors[name];
+        if (motor) {
+            const speedElement = motor.querySelector('.motor-speed');
+            const directionElement = motor.querySelector('.motor-direction');
+            const progressElement = motor.querySelector('.motor-progress');
+            
+            speedElement.textContent = `${Math.abs(speed)}%`;
+            directionElement.textContent = speed >= 0 ? '▶️' : '◀️';
+            
+            // Анимация скорости
+            progressElement.style.width = `${Math.abs(speed)}%`;
+            progressElement.style.background = speed >= 0 ? '#4CAF50' : '#f44336';
+        }
+    }
+}
+
+// Добавить CSS стили для моторов и PWM
+const motorStyles = `
+.motor {
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    background: white;
+}
+
+.motor-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.motor-speed {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.motor-direction {
+    font-size: 24px;
+    text-align: center;
+    margin: 5px 0;
+}
+
+.motor-bar {
+    width: 100%;
+    height: 20px;
+    background: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.motor-progress {
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+@keyframes pwm-flicker {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+}
+`;
+
+// Добавить стили в документ
+const styleSheet = document.createElement('style');
+styleSheet.textContent = motorStyles;
+document.head.appendChild(styleSheet);
 
 // Инициализация компонентов после загрузки страницы
 document.addEventListener('DOMContentLoaded', () => {

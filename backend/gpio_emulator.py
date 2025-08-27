@@ -6,8 +6,30 @@ class GPIOEmulator:
     def __init__(self):
         self.output_pin_states: Dict[int, bool] = {}
         self.input_pin_states: Dict[int, bool] = {}
+        self.pwm_states: Dict[int, Dict[str, any]] = {}  # pin -> {duty_cycle, frequency}
         self.states_file = "/app/gpio_states/states.json"
         self._ensure_states_file_exists()
+    
+    def update_pwm_state(self, pin: int, duty_cycle: float, frequency: float = 100):
+        """Обновляет состояние PWM пина"""
+        self.pwm_states[pin] = {
+            'duty_cycle': duty_cycle,
+            'frequency': frequency,
+            'active': duty_cycle > 0
+        }
+    
+    def get_pwm_state(self, pin: int) -> Dict[str, any]:
+        """Возвращает состояние PWM пина"""
+        return self.pwm_states.get(pin, {
+            'duty_cycle': 0,
+            'frequency': 100,
+            'active': False
+        })
+    
+    def reset_all_pins(self):
+        """Сбрасывает все пины в неактивное состояние"""
+        self.output_pin_states.clear()
+        self.pwm_states.clear()
         
     def _ensure_states_file_exists(self):
         os.makedirs(os.path.dirname(self.states_file), exist_ok=True)

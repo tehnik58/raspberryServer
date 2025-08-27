@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 # Устанавливаем пакеты для эмуляции
 RUN pip install requests
-
+RUN pip install numpy
 # Создаем директорию для состояний GPIO
 RUN mkdir -p /app/gpio_states && chmod 777 /app/gpio_states
 
