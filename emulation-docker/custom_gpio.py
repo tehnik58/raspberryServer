@@ -1,6 +1,7 @@
 """
 Кастомная реализация GPIO для эмуляции Raspberry Pi
 """
+import json
 import time
 import random
 import sys
@@ -26,28 +27,49 @@ class PWM:
         self.duty_cycle = 0
         self.running = False
         print(f"PWM initialized on pin {pin} with frequency {frequency}Hz")
+        # Отправляем событие инициализации PWM
+        self._send_pwm_event("init", pin, frequency, 0)
         sys.stdout.flush()
     
     def start(self, duty_cycle):
         self.duty_cycle = duty_cycle
         self.running = True
         print(f"PWM started on pin {self.pin} with duty cycle {duty_cycle}%")
+        # Отправляем событие старта PWM
+        self._send_pwm_event("start", self.pin, self.frequency, duty_cycle)
         sys.stdout.flush()
     
     def ChangeDutyCycle(self, duty_cycle):
         self.duty_cycle = duty_cycle
         print(f"PWM duty cycle changed to {duty_cycle}% on pin {self.pin}")
+        # Отправляем событие изменения скважности
+        self._send_pwm_event("duty_change", self.pin, self.frequency, duty_cycle)
         sys.stdout.flush()
     
     def ChangeFrequency(self, frequency):
         self.frequency = frequency
         print(f"PWM frequency changed to {frequency}Hz on pin {self.pin}")
+        # Отправляем событие изменения частоты
+        self._send_pwm_event("freq_change", self.pin, frequency, self.duty_cycle)
         sys.stdout.flush()
     
     def stop(self):
         self.running = False
         print(f"PWM stopped on pin {self.pin}")
+        # Отправляем событие остановки PWM
+        self._send_pwm_event("stop", self.pin, self.frequency, 0)
         sys.stdout.flush()
+    
+    def _send_pwm_event(self, event_type, pin, frequency, duty_cycle):
+        """Отправляет событие PWM через stdout"""
+        event = {
+            "type": "pwm_event",
+            "event": event_type,
+            "pin": pin,
+            "frequency": frequency,
+            "duty_cycle": duty_cycle
+        }
+        print(f"@@EMU_EVENT:{json.dumps(event)}")
 
 class CustomGPIO:
     def __init__(self):

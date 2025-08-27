@@ -1,56 +1,46 @@
 """
-Основной скрипт для выполнения пользовательского кода
+Сервис эмуляции Raspberry Pi
+Просто импортирует все модули и ждет в фоновом режиме
 """
+import time
 import sys
 import os
 
 # Добавляем текущую директорию в путь поиска модулей
 sys.path.insert(0, '/app')
 
-# Подменяем стандартные модули на наши эмуляции
+# Импортируем все модули эмуляции
 try:
-    # Пытаемся импортировать нашу эмуляцию
-    from RPi import GPIO
-    sys.modules['RPi'] = type(sys)('RPi')
-    sys.modules['RPi.GPIO'] = GPIO
+    from custom_gpio import GPIO, PWM
+    from custom_spi import spi
+    from custom_i2c import i2c, SMBus
+    from custom_components import components
+    
+    print("Raspberry Pi Emulator Service started successfully")
+    print("All modules imported:")
+    print("- GPIO module ready")
+    print("- SPI module ready") 
+    print("- I2C module ready")
+    print("- Components module ready")
+    
 except ImportError as e:
-    print(f"Error importing RPi.GPIO: {e}")
-    # Если не получается, используем fallback
-    import custom_gpio
-    sys.modules['RPi'] = type(sys)('RPi')
-    sys.modules['RPi.GPIO'] = custom_gpio
+    print(f"Import error: {e}")
+    sys.exit(1)
 
-# Добавляем наши эмулированные компоненты в глобальную область видимости
-from custom_components import components
-temperature = components.read_temperature
-humidity = components.read_humidity
-distance = components.read_distance
-set_led = components.set_led
-read_button = components.read_button
-create_motor = components.create_motor
-create_stepper = components.create_stepper
-get_motor_status = components.get_motor_status
-get_stepper_position = components.get_stepper_position
-PWM = GPIO.PWM
-
-# Выполняем пользовательский код
-if __name__ == "__main__":
-    if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
-        # Выполнение из файла
-        with open(sys.argv[1], 'r') as f:
-            code = f.read()
-        exec(code)
-    else:
-        # Интерактивный режим
-        print("Raspberry Pi Emulator - Interactive Mode")
-        print("Available components: GPIO, temperature(), humidity(), distance()")
-        print("Type 'exit()' to quit")
-        
+def main():
+    """Основная функция сервиса"""
+    print("Service is running in background mode...")
+    print("Press Ctrl+C to stop")
+    
+    try:
+        # Бесконечный цикл для поддержания сервиса активным
         while True:
-            try:
-                user_input = input('>>')
-                if user_input.strip() == 'exit()':
-                    break
-                exec(user_input)
-            except Exception as e:
-                print(f"Error: {e}")
+            time.sleep(1)
+            
+    except KeyboardInterrupt:
+        print("Service stopped by user")
+    except Exception as e:
+        print(f"Service error: {e}")
+
+if __name__ == "__main__":
+    main()

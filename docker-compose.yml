@@ -10,11 +10,20 @@ services:
       - ./frontend:/app/frontend
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
-    privileged: true
-    user: root
     depends_on:
       - emulation-docker
+    networks:
+      - raspberry-net
 
   emulation-docker:
     build: ./emulation-docker
-    image: rpi-emulator
+    container_name: raspberry-emulation
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - raspberry-net
+    restart: unless-stopped
+
+networks:
+  raspberry-net:
+    driver: bridge

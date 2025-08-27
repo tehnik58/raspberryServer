@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import json
 import os
 
@@ -6,7 +6,9 @@ class GPIOEmulator:
     def __init__(self):
         self.output_pin_states: Dict[int, bool] = {}
         self.input_pin_states: Dict[int, bool] = {}
-        self.pwm_states: Dict[int, Dict[str, any]] = {}  # pin -> {duty_cycle, frequency}
+        self.pwm_states: Dict[int, Dict[str, any]] = {}
+        self.spi_devices: List[Dict] = []  # Для отслеживания SPI устройств
+        self.i2c_devices: List[Dict] = []  # Для отслеживания I2C устройств
         self.states_file = "/app/gpio_states/states.json"
         self._ensure_states_file_exists()
     
@@ -68,3 +70,34 @@ class GPIOEmulator:
     def reset_all_pins(self):
         """Сбрасывает все пины в неактивное состояние"""
         self.output_pin_states.clear()
+
+    def add_spi_device(self, bus: int, device: int, device_type: str):
+        """Добавляет SPI устройство для отслеживания"""
+        self.spi_devices.append({
+            'bus': bus,
+            'device': device,
+            'type': device_type,
+            'active': False
+        })
+    
+    def add_i2c_device(self, address: int, device_type: str):
+        """Добавляет I2C устройство для отслеживания"""
+        self.i2c_devices.append({
+            'address': address,
+            'type': device_type,
+            'active': False
+        })
+    
+    def update_spi_activity(self, bus: int, device: int, active: bool):
+        """Обновляет состояние активности SPI устройства"""
+        for dev in self.spi_devices:
+            if dev['bus'] == bus and dev['device'] == device:
+                dev['active'] = active
+                break
+    
+    def update_i2c_activity(self, address: int, active: bool):
+        """Обновляет состояние активности I2C устройства"""
+        for dev in self.i2c_devices:
+            if dev['address'] == address:
+                dev['active'] = active
+                break

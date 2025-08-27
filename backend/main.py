@@ -71,6 +71,22 @@ async def websocket_endpoint(websocket: WebSocket):
                         "duty_cycle": duty_cycle,
                         "frequency": frequency
                     })
+            elif data.get("type") == "pwm_control":
+                pin = data.get("pin")
+                duty_cycle = data.get("duty_cycle")
+                frequency = data.get("frequency")
+                action = data.get("action")
+                
+                # Здесь можно реализовать управление PWM через эмулятор
+                # Пока просто логируем команду
+                print(f"PWM control: pin={pin}, action={action}, duty_cycle={duty_cycle}, frequency={frequency}")
+                
+                # Отправляем подтверждение
+                await websocket.send_json({
+                    "type": "pwm_control_response",
+                    "pin": pin,
+                    "status": "success"
+                })
                     
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)

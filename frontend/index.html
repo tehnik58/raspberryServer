@@ -4,12 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Эмулятор Raspberry Pi</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>🧠 Эмулятор Raspberry Pi</h1>
+            <div class="header-controls">
+                <button id="theme-toggle">🌙 Тема</button>
+                <button id="help-btn">❓ Помощь</button>
+            </div>
         </header>
 
         <div class="main-content">
@@ -18,9 +22,19 @@
                 <textarea id="python-code" placeholder="Введите ваш код Raspberry Pi здесь...">
 import RPi.GPIO as GPIO
 import time
+import spidev
+import smbus2
 
+# Пример кода для тестирования
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(18, GPIO.OUT)
+
+# SPI пример
+spi = spidev.SpiDev()
+spi.open(0, 0)
+
+# I2C пример
+bus = smbus2.SMBus(1)
 
 try:
     for i in range(10):
@@ -35,6 +49,8 @@ finally:
                     <button id="run-btn">▶️ Выполнить</button>
                     <button id="stop-btn">⏹️ Остановить</button>
                     <button id="clear-btn">🧹 Очистить</button>
+                    <button id="save-btn">💾 Сохранить</button>
+                    <button id="load-btn">📂 Загрузить</button>
                 </div>
             </div>
 
@@ -45,20 +61,82 @@ finally:
         </div>
 
         <div class="visualization">
-            <h2>Визуализация компонентов</h2>
-            <div id="gpio-components">
-                <!-- GPIO компоненты будут добавлены через JavaScript -->
+            <div class="visualization-tabs">
+                <button class="tab-btn active" data-tab="gpio">GPIO</button>
+                <button class="tab-btn" data-tab="motors">Моторы</button>
+                <button class="tab-btn" data-tab="sensors">Датчики</button>
+                <button class="tab-btn" data-tab="spi-i2c">SPI/I2C/PWM</button>
             </div>
-            <div id="sensor-data">
-                <!-- Данные с датчиков будут отображены здесь -->
+
+            <div class="tab-content active" id="gpio-tab">
+                <h2>Визуализация GPIO</h2>
+                <div id="gpio-components"></div>
+            </div>
+
+            <div class="tab-content" id="motors-tab">
+                <h2>Управление моторами</h2>
+                <div id="motor-controls"></div>
+                <div id="motor-visualization"></div>
+            </div>
+
+            <div class="tab-content" id="sensors-tab">
+                <h2>Данные с датчиков</h2>
+                <div id="sensor-data"></div>
+            </div>
+
+            <div class="tab-content" id="spi-i2c-tab">
+                <h2>Устройства SPI/I2C и управление PWM</h2>
+                <div class="bus-section">
+                    <h3>SPI Устройства</h3>
+                    <div id="spi-devices"></div>
+                </div>
+                <div class="bus-section">
+                    <h3>I2C Устройства</h3>
+                    <div id="i2c-devices"></div>
+                </div>
+                <div class="pwm-section">
+                    <h3>Управление PWM</h3>
+                    <div id="pwm-controls"></div>
+                    <div id="pwm-visualization"></div>
+                </div>
             </div>
         </div>
 
         <div class="connection-status">
             <span id="status">❌ Не подключено</span>
+            <span id="connection-time">00:00:00</span>
         </div>
     </div>
 
-    <script src="/static/script.js"></script>
+    <!-- Модальное окно помощи -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Помощь по эмулятору</h2>
+            <div class="help-content">
+                <h3>Поддерживаемые функции:</h3>
+                <ul>
+                    <li>GPIO ввод/вывод</li>
+                    <li>ШИМ (PWM) управление</li>
+                    <li>Двигатели постоянного тока</li>
+                    <li>Шаговые двигатели</li>
+                    <li>SPI устройства (MCP3008, WS2812)</li>
+                    <li>I2C устройства (BMP280, LCD)</li>
+                    <li>Различные датчики</li>
+                </ul>
+                <h3>Примеры кода:</h3>
+                <pre><code># GPIO пример
+import RPi.GPIO as GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(18, GPIO.OUT)
+GPIO.output(18, GPIO.HIGH)</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="websocket-client.js"></script>
+    <script src="components.js"></script>
+    <script src="spi-i2c-visualizer.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
