@@ -6,6 +6,7 @@ from fastapi import WebSocket
 import os
 import json
 import re
+from system_model import SystemModel
 
 class DockerManager:
     def __init__(self):
@@ -13,49 +14,26 @@ class DockerManager:
             self.client = docker.from_env()
             self.client.ping()
             print("Docker connection successful")
-            
-            # Находим запущенный контейнер emulation-docker
+
+            # Проверяем, запущен ли контейнер
             self.emulation_container = None
             containers = self.client.containers.list()
             for container in containers:
                 if 'emulation-docker' in container.name or 'raspberry-emulation' in container.name:
                     self.emulation_container = container
                     break
-            
-            if self.emulation_container:
-                print(f"Found emulation container: {self.emulation_container.name}")
+
+            if not self.emulation_container:
+                print("Emulation container not found. Starting...")
+                # Запускаем через docker-compose или вручную
+                # Или бросаем исключение
+                raise Exception("Контейнер emulation-docker не запущен. Выполните: docker-compose up --build")
             else:
-                print("Emulation container not found")
-                
+                print(f"Found emulation container: {self.emulation_container.name}")
+
         except Exception as e:
             print(f"Docker connection error: {e}")
-            raise Exception(f"Cannot connect to Docker daemon: {str(e)}")
-
-    async def execute_code_realtime(self, code: str, websocket: WebSocket) -> None:
-        """Выполняет код с потоковой передачей вывода через WebSocket"""
-        try:
-            print(f"Starting execution of code length: {len(code)}")
-
-            # Отправляем сообщение о начале выполнения
-            await websocket.send_json({
-                "type": "execution_started",
-                "message": "Выполнение началось"
-            })
-
-            if self.emulation_container:
-                # Используем скрипт-обертку в запущенном контейнере
-                await self._execute_via_container(code, websocket)
-            else:
-                # Альтернативный способ (должен работать, но лучше через контейнер)
-                await self._execute_direct(code, websocket)
-
-        except Exception as e:
-            error_msg = f"Ошибка выполнения: {str(e)}"
-            print(error_msg)
-            await websocket.send_json({
-                "type": "error",
-                "content": error_msg
-            })
+            raise
 
     async def _execute_via_container(self, code: str, websocket: WebSocket):
         """Выполняет код через запущенный контейнер"""
@@ -63,14 +41,12 @@ class DockerManager:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
             f.write(code)
             temp_file = f.name
-
         try:
             # Копируем файл в контейнер
             with open(temp_file, 'rb') as f:
                 # Создаем tar-архив
                 import tarfile
                 import io
-                
                 tar_stream = io.BytesIO()
                 with tarfile.open(fileobj=tar_stream, mode='w') as tar:
                     file_data = code.encode('utf-8')
@@ -78,18 +54,23 @@ class DockerManager:
                     tarinfo.size = len(file_data)
                     tarinfo.mtime = time.time()
                     tar.addfile(tarinfo, io.BytesIO(file_data))
-                
                 tar_stream.seek(0)
                 self.emulation_container.put_archive('/tmp', tar_stream)
-
             # Выполняем код через скрипт-обертку
             exec_command = ['python', '/app/execute.py', '/tmp/user_code.py']
-            exec_result = self.emulation_container.exec_run(
-                exec_command,
-                stream=True,
-                demux=True
-            )
-
+            try:
+                exec_result = self.emulation_container.exec_run(
+                    exec_command,
+                    stream=True,
+                    demux=True,
+                    socket=False
+                )
+            except Exception as e:
+                await websocket.send_json({
+                    "type": "error",
+                    "content": f"Ошибка выполнения команды: {str(e)}"
+                })
+                return
             # Читаем вывод в реальном времени
             for line in exec_result.output:
                 if line:
@@ -108,17 +89,62 @@ class DockerManager:
                                 "type": "error",
                                 "content": error_text
                             })
-                
                 await asyncio.sleep(0.01)
-
             # Отправляем сообщение о завершении
             await websocket.send_json({
                 "type": "execution_completed",
                 "message": "Выполнение завершено"
             })
-
         finally:
             # Удаляем временный файл
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+
+    async def _execute_via_container(self, code: str, websocket: WebSocket):
+        """Выполняет код через запущенный контейнер (альтернативный способ)"""
+        # Создаем временный файл с кодом
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+        try:
+            # Копируем файл в контейнер
+            with open(temp_file, 'rb') as f:
+                import tarfile
+                import io
+                tar_stream = io.BytesIO()
+                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                    file_data = code.encode('utf-8')
+                    tarinfo = tarfile.TarInfo(name='user_code.py')
+                    tarinfo.size = len(file_data)
+                    tarinfo.mtime = time.time()
+                    tar.addfile(tarinfo, io.BytesIO(file_data))
+                tar_stream.seek(0)
+                self.emulation_container.put_archive('/tmp', tar_stream)
+            # Выполняем код через execute.py
+            exec_command = ['python', '/app/execute.py', '/tmp/user_code.py']
+            exec_result = self.emulation_container.exec_run(
+                exec_command,
+                stream=True,
+                demux=True
+            )
+            # Чтение вывода
+            for stdout_chunk, stderr_chunk in exec_result.output:
+                if stdout_chunk:
+                    await websocket.send_json({
+                        "type": "output",
+                        "content": stdout_chunk.decode('utf-8').strip()
+                    })
+                if stderr_chunk:
+                    await websocket.send_json({
+                        "type": "error",
+                        "content": stderr_chunk.decode('utf-8').strip()
+                    })
+                await asyncio.sleep(0.01)
+            await websocket.send_json({
+                "type": "execution_completed",
+                "message": "Выполнение завершено"
+            })
+        finally:
             if os.path.exists(temp_file):
                 os.unlink(temp_file)
 
@@ -175,106 +201,129 @@ class DockerManager:
             # Удаляем временный файл
             if os.path.exists(temp_file):
                 os.unlink(temp_file)
-# В класс DockerManager добавляем метод для обработки событий
-async def _stream_container_logs(self, container):
-    """Асинхронно читает логи контейнера и парсит события"""
-    try:
-        # Получаем поток логов
-        log_stream = container.logs(stream=True, follow=True)
-        
-        # Регулярное выражение для поиска событий эмуляции
-        event_pattern = re.compile(r'@@EMU_EVENT:(\{.*\})')
-        
-        # Читаем логи в реальном времени
-        for line in log_stream:
-            output_line = line.decode('utf-8').strip()
-            if output_line:
-                # Проверяем, является ли строка событием эмуляции
-                event_match = event_pattern.search(output_line)
-                if event_match:
-                    try:
-                        event_data = json.loads(event_match.group(1))
-                        yield {'type': 'event', 'data': event_data}
-                    except json.JSONDecodeError:
+
+    async def _stream_container_logs(self, container):
+        """Асинхронно читает логи контейнера и парсит события"""
+        try:
+            log_stream = container.logs(stream=True, follow=True)
+            event_pattern = re.compile(r'@@EMU_EVENT:(\{.*\})')
+            for line in log_stream:
+                output_line = line.decode('utf-8').strip()
+                if output_line:
+                    event_match = event_pattern.search(output_line)
+                    if event_match:
+                        try:
+                            event_data = json.loads(event_match.group(1))
+                            yield {'type': 'event', 'data': event_data}
+                        except json.JSONDecodeError:
+                            yield {'type': 'output', 'data': output_line}
+                    else:
                         yield {'type': 'output', 'data': output_line}
-                else:
-                    yield {'type': 'output', 'data': output_line}
-            
-            # Даем возможность другим задачам работать
-            await asyncio.sleep(0.01)
-    except Exception as e:
-        yield {'type': 'output', 'data': f"Ошибка чтения логов: {str(e)}"}
+                await asyncio.sleep(0.01)
+        except Exception as e:
+            yield {'type': 'output', 'data': f"Ошибка чтения логов: {str(e)}"}
 
-# Обновляем execute_code_realtime для обработки событий
-async def execute_code_realtime(self, code: str, websocket: WebSocket) -> None:
-    """Выполняет код с потоковой передачей вывода через WebSocket"""
-    container = None
-    
-    try:
-        print(f"Starting execution of code length: {len(code)}")
+    # backend/docker_manager.py
 
-        # Отправляем сообщение о начале выполнения
-        await websocket.send_json({
-            "type": "execution_started",
-            "message": "Выполнение началось"
-        })
-
-        # Запускаем контейнер и передаем код через stdin
-        container = self.client.containers.run(
-            image="rpi-emulator",
-            command=['python', '-c', code],
-            detach=True,
-            mem_limit='100m',
-            network_mode='none',
-            stdout=True,
-            stderr=True,
-            remove=True
-        )
-
-        # Читаем логи в реальном времени
-        async for log_item in self._stream_container_logs(container):
-            if log_item['type'] == 'output':
-                await websocket.send_json({
-                    "type": "output",
-                    "content": log_item['data']
-                })
-            elif log_item['type'] == 'event':
-                # Отправляем событие эмуляции на фронтенд
-                await websocket.send_json({
-                    "type": "emu_event",
-                    "event": log_item['data']
-                })
-
-        # Ждем завершения контейнера
-        result = container.wait()
-        if result['StatusCode'] != 0:
+    async def execute_code_realtime(self, code: str, websocket: WebSocket, system_model=None) -> None:
+        """Выполняет код через запущенный контейнер emulation-docker"""
+        if not self.emulation_container:
             await websocket.send_json({
                 "type": "error",
-                "content": f"Ошибка: контейнер завершился с кодом {result['StatusCode']}"
+                "content": "Ошибка: контейнер эмуляции не запущен"
+            })
+            return
+
+        temp_file = None
+        try:
+            # Отправляем начало выполнения
+            await websocket.send_json({
+                "type": "execution_started",
+                "message": "Выполнение началось"
             })
 
-        # Отправляем сообщение о завершении
-        await websocket.send_json({
-            "type": "execution_completed",
-            "message": "Выполнение завершено"
-        })
+            # Создаём временный файл
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(code)
+                temp_file = f.name
 
-    except docker.errors.ImageNotFound:
-        await websocket.send_json({
-            "type": "error",
-            "content": "Ошибка: образ rpi-emulator не найден"
-        })
-    except Exception as e:
-        error_msg = f"Ошибка выполнения: {str(e)}"
-        print(error_msg)
-        await websocket.send_json({
-            "type": "error",
-            "content": error_msg
-        })
-    finally:
-        # Убеждаемся, что контейнер удален
-        if container:
-            try:
-                container.remove(force=True)
-            except:
-                pass
+            # Копируем файл в контейнер как tar-архив
+            import tarfile
+            import io
+            tar_stream = io.BytesIO()
+            with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                tarinfo = tarfile.TarInfo(name='user_code.py')
+                tarinfo.size = len(code.encode('utf-8'))
+                tar.addfile(tarinfo, io.BytesIO(code.encode('utf-8')))
+            tar_stream.seek(0)
+            self.emulation_container.put_archive('/tmp', tar_stream)
+
+            # Выполняем через execute.py
+            exec_command = ['python', '/app/execute.py', '/tmp/user_code.py']
+            exec_result = self.emulation_container.exec_run(
+                exec_command,
+                stream=True,
+                demux=True
+            )
+
+            # Читаем вывод в реальном времени
+            for stdout_chunk, stderr_chunk in exec_result.output:
+                if stdout_chunk:
+                    output_line = stdout_chunk.decode('utf-8').strip()
+                    if output_line:
+                        if output_line.startswith('@@EMU_EVENT:'):
+                            try:
+                                event_data = json.loads(output_line.replace('@@EMU_EVENT:', '', 1))
+                                await websocket.send_json({
+                                    "type": "emu_event",
+                                    "event": event_data
+                                })
+                            except json.JSONDecodeError:
+                                await websocket.send_json({
+                                    "type": "output",
+                                    "content": output_line
+                                })
+                        else:
+                            await websocket.send_json({
+                                "type": "output",
+                                "content": output_line
+                            })
+                if stderr_chunk:
+                    error_line = stderr_chunk.decode('utf-8').strip()
+                    if error_line:
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": error_line
+                        })
+                await asyncio.sleep(0.01)
+            # Только после завершения цикла проверяем exit_code
+            if exec_result.exit_code == 0:
+                await websocket.send_json({
+                    "type": "execution_completed",
+                    "message": "Выполнение завершено"
+                })
+            elif exec_result.exit_code is None:
+                # Это не ошибка — команда выполнилась, но код не пришёл
+                await websocket.send_json({
+                    "type": "execution_completed",
+                    "message": "Выполнение завершено (статус не получен)"
+                })
+            else:
+                await websocket.send_json({
+                    "type": "error",
+                    "content": f"Ошибка: контейнер завершился с кодом {exec_result.exit_code}"
+                })
+
+        except docker.errors.APIError as e:
+            await websocket.send_json({
+                "type": "error",
+                "content": f"Docker API ошибка: {str(e)}"
+            })
+        except Exception as e:
+            await websocket.send_json({
+                "type": "error",
+                "content": f"Ошибка выполнения: {str(e)}"
+            })
+        finally:
+            if temp_file and os.path.exists(temp_file):
+                os.unlink(temp_file)

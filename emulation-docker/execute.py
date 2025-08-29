@@ -3,8 +3,16 @@
 Скрипт-обертка для выполнения пользовательского кода
 с правильной настройкой окружения эмуляции
 """
+import json
 import sys
 import os
+
+if os.getenv("SYSTEM_MODEL_JSON"):
+    system_components = json.loads(os.getenv("SYSTEM_MODEL_JSON"))
+else:
+    system_components = {}
+
+globals()["SYSTEM_MODEL"] = system_components
 
 # Добавляем текущую директорию в путь поиска модулей
 sys.path.insert(0, '/app')
@@ -15,6 +23,7 @@ sys.modules['RPi.GPIO'] = __import__('custom_gpio')
 sys.modules['spidev'] = __import__('custom_spi')
 sys.modules['smbus'] = __import__('custom_i2c')
 sys.modules['smbus2'] = __import__('custom_i2c')
+sys.modules['spidev'] = __import__('custom_spi')
 
 # Импортируем эмулированные модули
 from custom_gpio import GPIO, PWM
@@ -48,12 +57,21 @@ def execute_code(code):
             '__file__': None,
             '__builtins__': __builtins__,
         })
-        
         # Выполняем код
         exec(code, local_vars)
         return True
+    except SyntaxError as e:
+        print(f"SyntaxError: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    except ImportError as e:
+        print(f"ImportError: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"RuntimeError: {e}")
         import traceback
         traceback.print_exc()
         return False
